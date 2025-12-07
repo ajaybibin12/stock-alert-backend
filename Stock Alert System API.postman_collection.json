@@ -1,0 +1,185 @@
+{
+	"info": {
+		"_postman_id": "ecfd4a94-eb57-4bfb-a638-7613a7336221",
+		"name": "Stock Alert System API",
+		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+		"_exporter_id": "28764767"
+	},
+	"item": [
+		{
+			"name": "Auth",
+			"item": [
+				{
+					"name": "Register User",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"email\": \"testuser@example.com\",\n  \"password\": \"123456\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/auth/register",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"auth",
+								"register"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Login User",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"email\": \"testuser@example.com\",\n  \"password\": \"123456\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/auth/login",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"auth",
+								"login"
+							]
+						}
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "Alerts",
+			"item": [
+				{
+					"name": "Create Alert",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"symbol\": \"AAPL\",\n  \"target_price\": 180,\n  \"direction\": \"above\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/alerts/create",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"alerts",
+								"create"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Get All Alerts",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/alerts/",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"alerts",
+								""
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Delete Alert",
+					"request": {
+						"method": "DELETE",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/alerts/{{alert_id}}",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"alerts",
+								"{{alert_id}}"
+							]
+						}
+					},
+					"response": []
+				}
+			]
+		}
+	],
+	"auth": {
+		"type": "bearer",
+		"bearer": [
+			{
+				"key": "token",
+				"value": "{{token}}",
+				"type": "string"
+			}
+		]
+	},
+	"event": [
+		{
+			"listen": "prerequest",
+			"script": {
+				"type": "text/javascript",
+				"packages": {},
+				"requests": {},
+				"exec": [
+					""
+				]
+			}
+		},
+		{
+			"listen": "test",
+			"script": {
+				"type": "text/javascript",
+				"packages": {},
+				"requests": {},
+				"exec": [
+					""
+				]
+			}
+		}
+	],
+	"variable": [
+		{
+			"key": "base_url",
+			"value": "http://localhost:8000"
+		},
+		{
+			"key": "token",
+			"value": ""
+		},
+		{
+			"key": "alert_id",
+			"value": "1"
+		}
+	]
+}

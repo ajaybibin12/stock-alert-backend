@@ -1,0 +1,31 @@
+<!DOCTYPE html>
+<html>
+<body>
+<h2>WebSocket Stock Alerts</h2>
+
+<input id="user_id" placeholder="User ID" />
+<button onclick="connect()">Connect</button>
+
+<ul id="messages"></ul>
+
+<script>
+let socket;
+
+function connect() {
+    const userId = document.getElementById("user_id").value;
+    socket = new WebSocket(`ws://localhost:8000/ws/${userId}`);
+
+    socket.onopen = () => console.log("Connected!");
+
+    socket.onmessage = (event) => {
+        const msg = JSON.parse(event.data);
+        console.log("Received:", msg);
+
+        const li = document.createElement("li");
+        li.innerText = JSON.stringify(msg);
+        document.getElementById("messages").appendChild(li);
+    };
+}
+</script>
+</body>
+</html>

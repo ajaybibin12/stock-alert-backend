@@ -1,0 +1,13 @@
+fastapi
+uvicorn[standard]
+SQLAlchemy
+asyncpg
+alembic
+python-dotenv
+pydantic
+passlib[bcrypt]
+python-jose
+celery
+redis
+httpx
+psycopg2-binary   # optional for sync tools, okay to keep

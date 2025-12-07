@@ -1,0 +1,18 @@
+###### python server ######
+
+uvicorn app.main:app --reload   
+
+##### Run Celery Worker #####
+
+celery -A app.celery_worker.celery_app worker --loglevel=info -P solo
+
+
+##### Run Celery Beat #####
+
+celery -A app.celery_worker.celery_app beat --loglevel=info
+
+
+#### Alembic database migrations #####
+
+alembic revision --autogenerate -m "Add cascade delete to alerts"
+alembic upgrade head

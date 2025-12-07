@@ -1,0 +1,23 @@
+# Virtual environment
+env/
+venv/
+__pycache__/
+*.pyc
+
+# Environment variables
+.env
+
+# Celery runtime files
+celerybeat-schedule
+celerybeat.pid
+
+# Logs
+*.log
+
+# Editor config
+.vscode/
+.idea/
+
+# OS files
+.DS_Store
+Thumbs.db
