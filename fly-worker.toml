@@ -1,0 +1,6 @@
+app = "stockalert-backend-worker"
+
+[build]
+
+[processes]
+  worker = "celery -A app.celery_worker.celery_app worker --loglevel=info -P solo"

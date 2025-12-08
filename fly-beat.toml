@@ -1,0 +1,6 @@
+app = "stockalert-backend-beat"
+
+[build]
+
+[processes]
+  beat = "celery -A app.celery_worker.celery_app beat --loglevel=info"

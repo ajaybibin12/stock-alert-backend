@@ -1,0 +1,19 @@
+app = "stockalert-backend-web"
+kill_signal = "SIGINT"
+kill_timeout = 5
+
+[build]
+  # build from local Dockerfile (default)
+
+[deploy]
+  # run alembic migrations before the app starts (optional)
+  release_command = "alembic upgrade head"
+
+[[services]]
+  internal_port = 8080
+  protocol = "tcp"
+
+  [[services.ports]]
+    port = 80
+  [[services.ports]]
+    port = 443
