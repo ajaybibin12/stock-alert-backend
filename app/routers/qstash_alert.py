@@ -2,11 +2,10 @@ import asyncio
 import json
 import httpx
 import redis.asyncio as redis
-from fastapi import APIRouter, Request, Depends, HTTPException
+from fastapi import APIRouter, Request, Header, Depends, HTTPException
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from colorama import Fore, init
-from typing import List
 
 from app.core.config import settings
 from app.db.models import Alert, AlertHistory, DirectionEnum, User
@@ -17,9 +16,12 @@ init(autoreset=True)
 router = APIRouter()
 
 
-# --- 1️⃣ Schedule alert via QStash ---
 @router.post("/schedule")
 async def schedule_alert(payload: dict):
+    """
+    Publish a QStash message which will POST to BACKEND_URL/tasks/process
+    (used for manual testing or from backend)
+    """
     if not getattr(settings, "QSTASH_URL", None) or not getattr(settings, "QSTASH_TOKEN", None):
         raise HTTPException(status_code=500, detail="QStash not configured")
 
@@ -42,7 +44,7 @@ async def schedule_alert(payload: dict):
     return {"status": "scheduled", "qstash_response": body}
 
 
-# --- 2️⃣ Process alerts (called by QStash or manually) ---
+# Primary route QStash will call: /tasks/process
 @router.post("/process")
 async def process_task(
     request: Request,
@@ -70,7 +72,11 @@ async def process_task(
     for alert in alerts:
         symbol = alert.symbol.upper()
 
-        url = f"https://finnhub.io/api/v1/quote?symbol={symbol}&token={settings.FINNHUB_API_KEY}"
+        url = (
+            f"https://finnhub.io/api/v1/quote?"
+            f"symbol={symbol}&token={settings.FINNHUB_API_KEY}"
+        )
+
         try:
             async with httpx.AsyncClient() as client:
                 res = await client.get(url, timeout=10.0)
@@ -88,10 +94,10 @@ async def process_task(
             or
             (alert.direction == DirectionEnum.BELOW and current_price < alert.target_price)
         )
+
         if not triggered:
             continue
 
-        # Mark alert triggered
         alert.is_triggered = True
         history = AlertHistory(alert_id=alert.id, triggered_price=current_price)
         db.add(history)
@@ -107,13 +113,14 @@ async def process_task(
         }
 
         channel = f"user:{alert.user_id}:alerts"
+
         try:
             await r.rpush(channel, json.dumps(payload))
             print(Fore.GREEN + f"Redis RPUSH → {channel}")
         except Exception as e:
             print(Fore.RED + f"Redis RPUSH failed: {e}")
 
-        # Send email asynchronously
+        # email sending (async)
         try:
             q = await db.execute(select(User).where(User.id == alert.user_id))
             user = q.scalar_one_or_none()
@@ -139,25 +146,11 @@ async def process_task(
     return {"status": "processed", "processed": len(alerts)}
 
 
-# --- 3️⃣ Endpoint for frontend polling ---
-@router.get("/latest/{user_id}")
-async def get_latest_alerts(user_id: int):
-    r = redis.from_url(settings.REDIS_URL)
-    channel = f"user:{user_id}:alerts"
-    alerts: List[dict] = []
-
-    try:
-        while True:
-            msg = await r.lpop(channel)
-            if not msg:
-                break
-            alerts.append(json.loads(msg.decode()))
-    except Exception as e:
-        print(Fore.RED + f"Failed to fetch alerts: {e}")
-    finally:
-        try:
-            await r.aclose()
-        except Exception:
-            pass
-
-    return {"alerts": alerts}
+# Compatibility alias: allow QStash or external tools to call /alerts/check
+@router.post("/check")
+async def process_task_alias(request: Request, db: AsyncSession = Depends(get_db)):
+    """
+    Backwards-compatible alias; calls the same processing logic at /tasks/process
+    QStash publish can point to either /tasks/process or /tasks/check
+    """
+    return await process_task(request, db)
