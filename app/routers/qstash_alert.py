@@ -17,19 +17,15 @@ init(autoreset=True)
 router = APIRouter()
 
 
-# ------------------------------------------------------------------
-# 1) schedule endpoint - publishes a QStash message that will call /tasks/process
-#    (frontend does not need to call this; it's provided for manual triggers)
-# ------------------------------------------------------------------
+# -----------------------------------------------------------
+# 1) /schedule → Publish a QStash message
+# -----------------------------------------------------------
 @router.post("/schedule")
 async def schedule_alert(payload: dict):
-    """
-    Publishes a message to QStash which will POST to BACKEND_URL/tasks/process.
-    """
     if not getattr(settings, "QSTASH_URL", None) or not getattr(settings, "QSTASH_TOKEN", None):
         raise HTTPException(status_code=500, detail="QStash not configured")
 
-    backend = settings.BACKEND_URL.rstrip("/")  # ensure no trailing slash
+    backend = settings.BACKEND_URL.rstrip("/")
     publish_url = f"{settings.QSTASH_URL.rstrip('/')}/v2/publish/{backend}/tasks/process"
 
     headers = {
@@ -42,36 +38,33 @@ async def schedule_alert(payload: dict):
 
     try:
         body = resp.json()
-    except Exception:
+    except:
         body = {"status_code": resp.status_code, "text": resp.text}
 
     return {"status": "scheduled", "qstash_response": body}
 
 
-# ------------------------------------------------------------------
-# 2) process endpoint - QStash (or manual POST) calls this to run the alert logic
-#    This is the exact replacement of your Celery check_alerts() logic.
-# ------------------------------------------------------------------
+# -----------------------------------------------------------
+# 2) /process → QStash calls this every minute
+# -----------------------------------------------------------
 @router.post("/process")
 async def process_task(
     request: Request,
     db: AsyncSession = Depends(get_db),
     upstash_signature: str | None = Header(None),
 ):
-    """
-    Called by QStash (or by you manually) to run alert checks.
-    Keeps the exact logic of the previous Celery task:
-      - query untriggered alerts
-      - call Finnhub
-      - if triggered: mark alert, insert AlertHistory, commit, publish to Redis channel, send email
-    """
-    # read body if any (QStash sends payload)
+    print(Fore.GREEN + "PROCESS TASK STARTED")
+    print(Fore.YELLOW + "Request headers:")
+    print(dict(request.headers))
+
+    # Read incoming QStash payload
     try:
         _incoming = await request.json()
-    except Exception:
+        print(Fore.GREEN + f"Incoming payload: {_incoming}")
+    except:
         _incoming = {}
 
-    # Query untriggered alerts
+    # Query active alerts
     result = await db.execute(select(Alert).where(Alert.is_triggered == False))
     alerts = result.scalars().all()
 
@@ -81,14 +74,22 @@ async def process_task(
 
     print(Fore.YELLOW + f"Found {len(alerts)} active alerts")
 
-    # Redis async client (pub/sub)
+    # Connect to Redis
     r = redis.from_url(settings.REDIS_URL)
+    print(Fore.BLUE + f"Connecting to Redis → {settings.REDIS_URL}")
+
+    # Test Redis connectivity
+    try:
+        await r.ping()
+        print(Fore.GREEN + "REDIS CONNECTED SUCCESSFULLY")
+    except Exception as e:
+        print(Fore.RED + f"REDIS CONNECTION FAILED: {e}")
 
     try:
         for alert in alerts:
             symbol = alert.symbol.upper()
 
-            # Finnhub Quote API
+            # Finnhub API
             url = (
                 f"https://finnhub.io/api/v1/quote?"
                 f"symbol={symbol}&token={settings.FINNHUB_API_KEY}"
@@ -98,9 +99,11 @@ async def process_task(
                 async with httpx.AsyncClient() as client:
                     res = await client.get(url, timeout=10.0)
 
+                print(Fore.YELLOW + f"Finnhub status: {res.status_code}")
+                print(Fore.CYAN + f"Finnhub raw: {res.text}")
+
                 if res.status_code == 429:
                     print(Fore.RED + "Rate Limit Exceeded!")
-                    # stop current run; QStash will handle retries (or you can schedule again)
                     return {"error": "rate_limit"}
 
                 data = res.json()
@@ -115,7 +118,6 @@ async def process_task(
 
             print(Fore.CYAN + f"{symbol} → Current: {current_price}, Target: {alert.target_price}")
 
-            # Determine trigger condition (same as before)
             triggered = (
                 (alert.direction == DirectionEnum.ABOVE and current_price > alert.target_price)
                 or
@@ -125,20 +127,20 @@ async def process_task(
             if not triggered:
                 continue
 
-            # 1. Mark alert as triggered
+            # 1. Mark alert triggered
             alert.is_triggered = True
 
-            # 2. Create history record
+            # 2. Insert history
             history = AlertHistory(alert_id=alert.id, triggered_price=current_price)
             db.add(history)
 
             # 3. Commit to DB
             await db.commit()
 
-            # 4. Refresh alert object
+            # 4. Refresh
             await db.refresh(alert)
 
-            # 5. Publish WebSocket message via Redis
+            # 5. Redis publish WebSocket message
             payload = {
                 "type": "alert_triggered",
                 "symbol": alert.symbol,
@@ -148,15 +150,14 @@ async def process_task(
             }
 
             channel = f"user:{alert.user_id}:alerts"
+
             try:
-                # redis.publish returns int in sync; async publish returns int as awaitable
-                await r.publish(channel, json.dumps(payload))
-                print(Fore.GREEN + f"ALERT TRIGGERED → Published to {channel}")
+                pub = await r.publish(channel, json.dumps(payload))
+                print(Fore.GREEN + f"Redis publish result = {pub}")
             except Exception as e:
                 print(Fore.RED + f"Redis publish failed: {e}")
 
-            # 6. Send email (non-blocking)
-            # schedule email send in background thread to avoid blocking event loop
+            # 6. Send email
             if alert.user_id:
                 try:
                     q = await db.execute(select(User).where(User.id == alert.user_id))
@@ -167,7 +168,6 @@ async def process_task(
 
                 if user and getattr(user, "email", None):
                     try:
-                        # run blocking email send in thread so it doesn't block the asyncio loop
                         asyncio.create_task(
                             asyncio.to_thread(
                                 send_alert_email,
@@ -186,5 +186,5 @@ async def process_task(
     finally:
         try:
             await r.close()
-        except Exception:
+        except:
             pass
