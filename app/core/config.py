@@ -20,6 +20,11 @@ class Settings(BaseSettings):
     EMAIL_PORT: int     # ✅ MUST BE INT
     EMAIL_USER: str
     EMAIL_PASS: str
+    BACKEND_URL: str
+    QSTASH_URL: str
+    QSTASH_TOKEN: str
+    QSTASH_CURRENT_SIGNING_KEY: str
+    QSTASH_NEXT_SIGNING_KEY: str
 
     class Config:
         env_file = ".env"

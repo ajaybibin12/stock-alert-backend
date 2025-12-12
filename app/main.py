@@ -5,6 +5,7 @@ from app.routers import websocket as websocket_router
 from app.routers import auth as auth_router
 from app.routers import alerts as alerts_router
 from app.routers import stock as stock_router
+from app.routers import qstash_alert as qstash_router
 from app.core.config import settings
 from colorama import Fore, Style, init
 
@@ -25,6 +26,7 @@ app.include_router(auth_router.router, prefix="/auth", tags=["auth"])
 app.include_router(alerts_router.router, prefix="/alerts", tags=["alerts"])
 app.include_router(websocket_router.router, prefix="", tags=["websocket"])
 app.include_router(stock_router.router, prefix="/stock", tags=["stock"])
+app.include_router(qstash_router.router, prefix="/tasks", tags=["qstash_alert"])
 
 @app.get("/")
 async def root():
