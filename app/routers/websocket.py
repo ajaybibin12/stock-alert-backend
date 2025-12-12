@@ -7,34 +7,53 @@ from app.core.config import settings
 init(autoreset=True)
 router = APIRouter()
 
+# Optional: keep track of active connections per user
+active_connections: dict[int, list[WebSocket]] = {}
+
 @router.websocket("/ws/alerts/{user_id}")
 async def websocket_alerts(websocket: WebSocket, user_id: int):
     await websocket.accept()
     print(Fore.GREEN + f"WS connected: user={user_id}")
+
+    # Add to active connections
+    if user_id not in active_connections:
+        active_connections[user_id] = []
+    active_connections[user_id].append(websocket)
 
     r = redis.from_url(settings.REDIS_URL)
     channel = f"user:{user_id}:alerts"
 
     try:
         while True:
-            # Poll Redis LIST for messages (works with Upstash)
             msg = await r.lpop(channel)
-
             if msg:
-                print(Fore.YELLOW + f"WS sending → {msg}")
-                # msg is bytes; decode before sending
-                try:
-                    await websocket.send_text(msg.decode())
-                except Exception as e:
-                    print(Fore.RED + f"Failed to send WS message: {e}")
+                msg_text = msg.decode()
+                # Send to all active connections for this user
+                to_remove = []
+                for ws in active_connections[user_id]:
+                    if ws.client_state.name == "CONNECTED":
+                        try:
+                            await ws.send_text(msg_text)
+                            print(Fore.YELLOW + f"WS sending → {msg_text}")
+                        except Exception as e:
+                            print(Fore.RED + f"Failed to send WS message: {e}")
+                            to_remove.append(ws)
+                    else:
+                        to_remove.append(ws)
+                # Remove closed connections
+                for ws in to_remove:
+                    if ws in active_connections[user_id]:
+                        active_connections[user_id].remove(ws)
 
-            # prevent 100% CPU
             await asyncio.sleep(0.3)
 
     except Exception as e:
         print(Fore.RED + f"WebSocket error: {e}")
 
     finally:
+        # Cleanup
+        if websocket in active_connections.get(user_id, []):
+            active_connections[user_id].remove(websocket)
         try:
             await r.aclose()
         except Exception:
