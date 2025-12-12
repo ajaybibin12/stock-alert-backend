@@ -1,41 +1,3 @@
-# from fastapi import APIRouter, WebSocket
-# import asyncio
-# import redis.asyncio as redis
-# from colorama import Fore, Style, init
-# from app.core.config import settings
-# init(autoreset=True)
-
-# router = APIRouter()
-
-# @router.websocket("/ws/alerts/{user_id}")
-# async def websocket_alerts(websocket: WebSocket, user_id: int):
-#     await websocket.accept()
-
-#     print(Fore.GREEN + f"WS connected: user={user_id}")
-
-#     # Redis subscriber
-#     r = redis.from_url(settings.REDIS_URL)
-#     pubsub = r.pubsub()
-#     channel = f"user:{user_id}:alerts"
-#     await pubsub.subscribe(channel)
-
-#     try:
-#         while True:
-#             message = await pubsub.get_message(ignore_subscribe_messages=True, timeout=1.0)
-#             if message:
-#                 await websocket.send_text(message["data"].decode())
-
-#             # also allow client to send messages without blocking
-#             await asyncio.sleep(0.01)
-
-#     except Exception as e:
-#         print(Fore.RED + "WebSocket closed:", e)
-#     finally:
-#         await pubsub.unsubscribe(channel)
-#         await pubsub.close()
-#         await r.close()
-
-
 from fastapi import APIRouter, WebSocket
 import asyncio
 import redis.asyncio as redis
@@ -55,12 +17,16 @@ async def websocket_alerts(websocket: WebSocket, user_id: int):
 
     try:
         while True:
-            # Poll Redis LIST for messages
+            # Poll Redis LIST for messages (works with Upstash)
             msg = await r.lpop(channel)
 
             if msg:
                 print(Fore.YELLOW + f"WS sending → {msg}")
-                await websocket.send_text(msg.decode())
+                # msg is bytes; decode before sending
+                try:
+                    await websocket.send_text(msg.decode())
+                except Exception as e:
+                    print(Fore.RED + f"Failed to send WS message: {e}")
 
             # prevent 100% CPU
             await asyncio.sleep(0.3)
@@ -69,5 +35,8 @@ async def websocket_alerts(websocket: WebSocket, user_id: int):
         print(Fore.RED + f"WebSocket error: {e}")
 
     finally:
-        await r.aclose()
+        try:
+            await r.aclose()
+        except Exception:
+            pass
         print(Fore.RED + "WebSocket closed")

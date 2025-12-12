@@ -1,4 +1,3 @@
-# app/routers/qstash_alert.py
 import asyncio
 import json
 import httpx
@@ -19,6 +18,10 @@ router = APIRouter()
 
 @router.post("/schedule")
 async def schedule_alert(payload: dict):
+    """
+    Publish a QStash message which will POST to BACKEND_URL/tasks/process
+    (used for manual testing or from backend)
+    """
     if not getattr(settings, "QSTASH_URL", None) or not getattr(settings, "QSTASH_TOKEN", None):
         raise HTTPException(status_code=500, detail="QStash not configured")
 
@@ -35,12 +38,13 @@ async def schedule_alert(payload: dict):
 
     try:
         body = resp.json()
-    except:
+    except Exception:
         body = {"status_code": resp.status_code, "text": resp.text}
 
     return {"status": "scheduled", "qstash_response": body}
 
 
+# Primary route QStash will call: /tasks/process
 @router.post("/process")
 async def process_task(
     request: Request,
@@ -51,7 +55,7 @@ async def process_task(
     try:
         _incoming = await request.json()
         print(Fore.GREEN + f"Incoming payload: {_incoming}")
-    except:
+    except Exception:
         _incoming = {}
 
     result = await db.execute(select(Alert).where(Alert.is_triggered == False))
@@ -79,8 +83,10 @@ async def process_task(
             data = res.json()
             current_price = data.get("c")
             if current_price is None:
+                print(Fore.RED + f"No price returned for {symbol}")
                 continue
-        except:
+        except Exception as e:
+            print(Fore.RED + f"Error fetching {symbol}: {e}")
             continue
 
         triggered = (
@@ -114,7 +120,7 @@ async def process_task(
         except Exception as e:
             print(Fore.RED + f"Redis RPUSH failed: {e}")
 
-        # email sending
+        # email sending (async)
         try:
             q = await db.execute(select(User).where(User.id == alert.user_id))
             user = q.scalar_one_or_none()
@@ -128,8 +134,23 @@ async def process_task(
                         alert.target_price,
                     )
                 )
-        except:
-            pass
+                print(Fore.MAGENTA + f"EMAIL QUEUED → {user.email}")
+        except Exception as e:
+            print(Fore.RED + f"Email lookup/send failed: {e}")
 
-    await r.close()
+    try:
+        await r.aclose()
+    except Exception:
+        pass
+
     return {"status": "processed", "processed": len(alerts)}
+
+
+# Compatibility alias: allow QStash or external tools to call /alerts/check
+@router.post("/check")
+async def process_task_alias(request: Request, db: AsyncSession = Depends(get_db)):
+    """
+    Backwards-compatible alias; calls the same processing logic at /tasks/process
+    QStash publish can point to either /tasks/process or /tasks/check
+    """
+    return await process_task(request, db)
