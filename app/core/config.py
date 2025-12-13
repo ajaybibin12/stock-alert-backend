@@ -1,5 +1,4 @@
 from pydantic_settings import BaseSettings
-import os
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -15,15 +14,16 @@ class Settings(BaseSettings):
 
     FINNHUB_API_KEY: str | None = None
 
-    # ✅ EMAIL SETTINGS (REQUIRED)
-    EMAIL_HOST: str
-    EMAIL_PORT: int
-    EMAIL_USER: str
-    EMAIL_PASS: str
+    # ✅ EMAIL SETTINGS
+    EMAIL_PROVIDER: str = "sendgrid"
 
-    # ✅ NEW EMAIL SETTINGS FOR SENDGRID
-    # ✅ SENDGRID (NEW)
-    EMAIL_PROVIDER: str | None = "sendgrid"
+    # SMTP (optional)
+    EMAIL_HOST: str | None = None
+    EMAIL_PORT: int | None = None
+    EMAIL_USER: str | None = None
+    EMAIL_PASS: str | None = None
+
+    # SendGrid
     SENDGRID_API_KEY: str | None = None
     EMAIL_FROM: str | None = None
 
@@ -39,6 +39,5 @@ class Settings(BaseSettings):
         env_file = ".env"
         env_file_encoding = "utf-8"
 
+
 settings = Settings()
-
-
