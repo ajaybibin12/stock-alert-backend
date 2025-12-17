@@ -13,10 +13,15 @@ init(autoreset=True)
 
 app = FastAPI(title="Stock Alert System")
 
+origins = [
+    "https://stock-alert-ui-sable.vercel.app",
+    "http://localhost:5173",
+]
+
 # CORS middleware to allow cross-origin requests
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # Allows all origins
+    allow_origins=origins,
     allow_credentials=True,
     allow_methods=["*"],  # Allows all methods
     allow_headers=["*"],  # Allows all headers
