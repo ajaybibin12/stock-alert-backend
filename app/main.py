@@ -16,6 +16,7 @@ app = FastAPI(title="Stock Alert System")
 origins = [
     "https://stock-alert-ui-sable.vercel.app",
     "http://localhost:5173",
+    "https://stock-alert-oggae2zqc-ajay-bibins-projects.vercel.app/",
 ]
 
 # CORS middleware to allow cross-origin requests
